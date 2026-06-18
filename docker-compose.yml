@@ -1,0 +1,50 @@
+name: tenantcore
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: tenantcore-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tenantcore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tenantcore}
+      POSTGRES_DB: ${POSTGRES_DB:-tenantcore}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tenantcore} -d ${POSTGRES_DB:-tenantcore}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    container_name: tenantcore-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-tenantcore};Username=${POSTGRES_USER:-tenantcore};Password=${POSTGRES_PASSWORD:-tenantcore}"
+      Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_super_secret_dev_signing_key_at_least_32_chars_long}
+      Jwt__Issuer: TenantCore
+      Jwt__Audience: TenantCore
+      Jwt__AccessTokenMinutes: ${JWT_ACCESS_MINUTES:-15}
+      Jwt__RefreshTokenDays: ${JWT_REFRESH_DAYS:-7}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: tenantcore-frontend
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+
+volumes:
+  pgdata:
